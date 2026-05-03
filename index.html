@@ -1,0 +1,369 @@
+<script>
+  const symbols = ["🍒", "🍋", "🍇", "🔔", "💎", "7️⃣", "⭐", "🎁", "x2", "x3", "x5", "x10"];
+
+  const weight = [
+    "🍒","🍒","🍒","🍒","🍒",
+    "🍋","🍋","🍋","🍋",
+    "🍇","🍇","🍇",
+    "🔔","🔔",
+    "💎","💎",
+    "7️⃣",
+    "⭐",
+    "🎁","🎁",
+    "x2","x3","x5","x10"
+  ];
+
+  const multiplier = {
+    "🍒": 2,
+    "🍋": 3,
+    "🍇": 4,
+    "🔔": 6,
+    "💎": 10,
+    "7️⃣": 20
+  };
+
+  const kaliSymbol = {
+    "x2": 2,
+    "x3": 3,
+    "x5": 5,
+    "x10": 10
+  };
+
+  const paylines = [
+    [1,1,1,1,1],
+    [0,0,0,0,0],
+    [2,2,2,2,2],
+    [0,1,2,1,0],
+    [2,1,0,1,2]
+  ];
+
+  let balance = Number(localStorage.getItem("slot_balance")) || 1000;
+  let bet = Number(localStorage.getItem("slot_bet")) || 20;
+  let freeSpins = Number(localStorage.getItem("slot_free")) || 0;
+  let currentMultiplier = Number(localStorage.getItem("slot_multi")) || 1;
+  let spinning = false;
+  let grid = [];
+
+  const reelsEl = document.getElementById("reels");
+  const balanceEl = document.getElementById("balance");
+  const betEl = document.getElementById("bet");
+  const freeEl = document.getElementById("freeSpins");
+  const msgEl = document.getElementById("message");
+  const spinBtn = document.getElementById("spinBtn");
+  const minusBet = document.getElementById("minusBet");
+  const plusBet = document.getElementById("plusBet");
+  const claimBtn = document.getElementById("claimBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  function save() {
+    localStorage.setItem("slot_balance", balance);
+    localStorage.setItem("slot_bet", bet);
+    localStorage.setItem("slot_free", freeSpins);
+    localStorage.setItem("slot_multi", currentMultiplier);
+  }
+
+  function updateUI() {
+    balanceEl.textContent = balance;
+    betEl.textContent = bet;
+    freeEl.textContent = freeSpins;
+
+    if (freeSpins > 0) {
+      spinBtn.textContent = "FREE SPIN x" + currentMultiplier;
+      spinBtn.classList.add("free");
+    } else {
+      spinBtn.textContent = "SPIN";
+      spinBtn.classList.remove("free");
+      currentMultiplier = 1;
+    }
+
+    save();
+  }
+
+  function randomSymbol() {
+    return weight[Math.floor(Math.random() * weight.length)];
+  }
+
+  function createRandomGrid() {
+    const result = [];
+
+    for (let col = 0; col < 5; col++) {
+      result[col] = [];
+
+      for (let row = 0; row < 3; row++) {
+        result[col][row] = randomSymbol();
+      }
+    }
+
+    return result;
+  }
+
+  function drawGrid(winCells = []) {
+    reelsEl.innerHTML = "";
+
+    for (let col = 0; col < 5; col++) {
+      const reel = document.createElement("div");
+      reel.className = "reel";
+
+      for (let row = 0; row < 3; row++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.textContent = grid[col][row];
+
+        if (grid[col][row] === "🎁") {
+          cell.style.background = "linear-gradient(180deg, #fff3b0, #ff9f1c)";
+        }
+
+        if (grid[col][row].includes("x")) {
+          cell.style.background = "linear-gradient(180deg, #90e0ef, #0077b6)";
+          cell.style.color = "white";
+          cell.style.fontSize = "24px";
+          cell.style.fontWeight = "900";
+        }
+
+        if (winCells.some(c => c.col === col && c.row === row)) {
+          cell.classList.add("win");
+        }
+
+        reel.appendChild(cell);
+      }
+
+      reelsEl.appendChild(reel);
+    }
+  }
+
+  function evaluateWin() {
+    let totalWin = 0;
+    let winCells = [];
+    let linesWon = 0;
+    let scatterCount = 0;
+    let bestMultiplier = 1;
+
+    for (let col = 0; col < 5; col++) {
+      for (let row = 0; row < 3; row++) {
+        const symbol = grid[col][row];
+
+        if (symbol === "🎁") {
+          scatterCount++;
+          winCells.push({ col, row });
+        }
+
+        if (kaliSymbol[symbol]) {
+          bestMultiplier = Math.max(bestMultiplier, kaliSymbol[symbol]);
+          winCells.push({ col, row });
+        }
+      }
+    }
+
+    if (freeSpins > 0 && bestMultiplier > 1) {
+      currentMultiplier = Math.max(currentMultiplier, bestMultiplier);
+    }
+
+    for (const line of paylines) {
+      const lineSymbols = [];
+
+      for (let col = 0; col < 5; col++) {
+        lineSymbols.push(grid[col][line[col]]);
+      }
+
+      let base = null;
+
+      for (const s of lineSymbols) {
+        if (s !== "⭐" && s !== "🎁" && !kaliSymbol[s]) {
+          base = s;
+          break;
+        }
+      }
+
+      if (!base || !multiplier[base]) continue;
+
+      let count = 0;
+
+      for (let i = 0; i < lineSymbols.length; i++) {
+        const s = lineSymbols[i];
+
+        if (s === base || s === "⭐") {
+          count++;
+        } else {
+          break;
+        }
+      }
+
+      if (count >= 3) {
+        const lineWin = bet * multiplier[base] * (count - 2);
+        totalWin += lineWin;
+        linesWon++;
+
+        for (let col = 0; col < count; col++) {
+          winCells.push({ col, row: line[col] });
+        }
+      }
+    }
+
+    let bonusText = "";
+
+    if (scatterCount >= 3) {
+      freeSpins += 8;
+      currentMultiplier = 2;
+
+      const scatterWin = bet * 10;
+      totalWin += scatterWin;
+
+      bonusText =
+        `<br>🎁 SCATTER AKTIF! +8 Free Spin` +
+        `<br>⚡ Multiplier mulai dari x2` +
+        `<br>Bonus Scatter +${scatterWin} koin`;
+    }
+
+    if (freeSpins > 0 && totalWin > 0) {
+      totalWin = totalWin * currentMultiplier;
+    }
+
+    return {
+      totalWin,
+      winCells,
+      linesWon,
+      bonusText,
+      scatterCount,
+      bestMultiplier
+    };
+  }
+
+  function coinPop(text) {
+    const pop = document.createElement("div");
+    pop.className = "coin-pop";
+    pop.textContent = text;
+    pop.style.left = (window.innerWidth / 2 - 40) + "px";
+    pop.style.top = "55%";
+    document.body.appendChild(pop);
+
+    setTimeout(() => pop.remove(), 900);
+  }
+
+  function spin() {
+    if (spinning) return;
+
+    if (freeSpins <= 0 && balance < bet) {
+      msgEl.innerHTML = "Koin tidak cukup. Ambil bonus harian dulu 🎁";
+      return;
+    }
+
+    spinning = true;
+    spinBtn.disabled = true;
+    minusBet.disabled = true;
+    plusBet.disabled = true;
+    claimBtn.disabled = true;
+
+    if (freeSpins > 0) {
+      freeSpins--;
+      msgEl.innerHTML = `Free Spin berjalan... Multiplier x${currentMultiplier} ⚡`;
+    } else {
+      balance -= bet;
+      currentMultiplier = 1;
+      msgEl.innerHTML = "Memutar reel... 🎰";
+    }
+
+    updateUI();
+
+    let ticks = 0;
+
+    const spinTimer = setInterval(() => {
+      grid = createRandomGrid();
+      drawGrid();
+      ticks++;
+
+      if (ticks >= 20) {
+        clearInterval(spinTimer);
+
+        grid = createRandomGrid();
+        const result = evaluateWin();
+
+        if (result.totalWin > 0) {
+          balance += result.totalWin;
+
+          msgEl.innerHTML =
+            `🔥 MENANG ${result.totalWin} KOIN!<br>` +
+            `Garis menang: ${result.linesWon}<br>` +
+            `⚡ Multiplier: x${currentMultiplier}` +
+            result.bonusText;
+
+          coinPop("+" + result.totalWin);
+          drawGrid(result.winCells);
+        } else {
+          if (result.bestMultiplier > 1 && freeSpins > 0) {
+            msgEl.innerHTML =
+              `⚡ Multiplier naik jadi x${currentMultiplier}<br>` +
+              `Free Spin tersisa: ${freeSpins}`;
+            drawGrid(result.winCells);
+          } else {
+            msgEl.innerHTML = "Belum menang. Coba spin lagi 😄";
+            drawGrid();
+          }
+        }
+
+        spinning = false;
+        spinBtn.disabled = false;
+        minusBet.disabled = false;
+        plusBet.disabled = false;
+        claimBtn.disabled = false;
+        updateUI();
+      }
+    }, 80);
+  }
+
+  function changeBet(amount) {
+    if (spinning) return;
+
+    const newBet = bet + amount;
+
+    if (newBet < 10) return;
+    if (newBet > 200) return;
+
+    bet = newBet;
+    updateUI();
+  }
+
+  function claimBonus() {
+    const today = new Date().toDateString();
+    const lastClaim = localStorage.getItem("slot_bonus_day");
+
+    if (lastClaim === today) {
+      msgEl.innerHTML = "Bonus harian sudah diambil hari ini ✅";
+      return;
+    }
+
+    balance += 500;
+    localStorage.setItem("slot_bonus_day", today);
+    msgEl.innerHTML = "🎁 Bonus harian +500 koin berhasil diambil!";
+    coinPop("+500");
+    updateUI();
+  }
+
+  function resetGame() {
+    const yakin = confirm("Reset semua koin dan progress?");
+    if (!yakin) return;
+
+    balance = 1000;
+    bet = 20;
+    freeSpins = 0;
+    currentMultiplier = 1;
+
+    localStorage.removeItem("slot_bonus_day");
+
+    msgEl.innerHTML = "Game sudah direset. Mulai lagi 🎰";
+
+    updateUI();
+
+    grid = createRandomGrid();
+    drawGrid();
+  }
+
+  spinBtn.addEventListener("click", spin);
+  minusBet.addEventListener("click", () => changeBet(-10));
+  plusBet.addEventListener("click", () => changeBet(10));
+  claimBtn.addEventListener("click", claimBonus);
+  resetBtn.addEventListener("click", resetGame);
+
+  grid = createRandomGrid();
+  drawGrid();
+  updateUI();
+</script>
